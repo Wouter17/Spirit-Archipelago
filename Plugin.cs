@@ -1,16 +1,19 @@
-﻿using Archipelago.MultiClient.Net.Enums;
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
 using Archipelago.MultiClient.Net;
+using Archipelago.MultiClient.Net.BounceFeatures.DeathLink;
+using Archipelago.MultiClient.Net.Enums;
 using BepInEx;
 using BepInEx.Logging;
 using Handelabra.SpiritIsland.Engine;
 using Handelabra.SpiritIsland.Engine.Controller;
 using HarmonyLib;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 using Logger = BepInEx.Logging.Logger;
-using Archipelago.MultiClient.Net.BounceFeatures.DeathLink;
 
 namespace Archipelago;
 
@@ -18,26 +21,37 @@ public static class Globals
 {
     public const string PLUS_ENERGY_NAME = "+1 Energy";
     public const string PLUS_CARDPLAYS_NAME = "+1 Cardplay";
+    public const string PLAY_CARD_PREFIX = "Play: ";
     public const string GAME_NAME = "Spirit Island";
 }
 
 public static class ArchipelagoModifiers
 {
-    // cards to filter out, updated by the Archipelago network
-    public static HashSet<string> LockedCards = [];
+    // public static HashSet<string> LockedCards = [];
+
+    public static HashSet<string> BaseLockedCards {get; set;} = [];
+    public static HashSet<string> GottenItems {get; set;} = [];
     public static int energyAdjustment = 0;
     public static int cardplaysAdjustment = 0;
+
+    public static HashSet<string> LockedCards()
+    {
+        var logger = Logger.CreateLogSource("ArchipelagoModifiers");
+        return BaseLockedCards.Except(GottenItems).ToHashSet();
+    }
 }
 
 public static class ArchipelagoMessenger
 {
-    static ManualLogSource logger = Logger.CreateLogSource("ArchipelagoMessager");
-    static ArchipelagoSession? session;
+    static readonly ManualLogSource logger = Logger.CreateLogSource("ArchipelagoMessenger");
+    public static ArchipelagoSession? session;
     static DeathLinkService? deathLinkService;
-    static Queue<string> queuedLocations = new();
-    static HashSet<long> goals = new() { -1 };
+    static readonly Queue<string> queuedLocations = new();
+    static HashSet<long> goals = [-1];
 
-    public static void initialiseSession(ref ArchipelagoSession session, ref DeathLinkService deathLinkService)
+    public static int Deathlink {get; private set;} = 0;
+
+    public static void InitialiseSession(ref ArchipelagoSession session, ref DeathLinkService deathLinkService)
     {
         session.Socket.SocketClosed += (socket) =>
         {
@@ -49,7 +63,8 @@ public static class ArchipelagoMessenger
             var itemReceivedName = receivedItemsHelper.PeekItem();
             if (itemReceivedName == null) return;
 
-            var itemName = itemReceivedName.ToString();
+            var itemName = itemReceivedName.ItemName;
+            logger.LogInfo($"Received {itemName}");
 
             if (itemName == Globals.PLUS_ENERGY_NAME)
             {
@@ -61,7 +76,10 @@ public static class ArchipelagoMessenger
             }
             else
             {
-                ArchipelagoModifiers.LockedCards.Remove(itemName);
+                logger.LogInfo($"Adding {itemName} to allowed cards");
+                ArchipelagoModifiers.GottenItems.Add(itemName);
+                // ArchipelagoModifiers.LockedCards.Remove(itemName);
+                // logger.LogInfo($"Cards not allowed are {string.Join(",", ArchipelagoModifiers.LockedCards)}"); //TODO make debug log
             }
 
             receivedItemsHelper.DequeueItem();
@@ -78,7 +96,7 @@ public static class ArchipelagoMessenger
     {
         session = ArchipelagoSessionFactory.CreateSession(server);
         deathLinkService = session.CreateDeathLinkService();
-        initialiseSession(ref session, ref deathLinkService);
+        InitialiseSession(ref session, ref deathLinkService);
 
         LoginResult result;
 
@@ -115,34 +133,38 @@ public static class ArchipelagoMessenger
         OnSessionConnected();
 
         var gottenItems = session.Items.AllItemsReceived.Select(item => item.ItemName);
-        ArchipelagoModifiers.energyAdjustment = (int)loginSuccess.SlotData["base_energy_offset"] + gottenItems.Where(name => name == Globals.PLUS_ENERGY_NAME).Count(); //TODO add gotten checks
-        ArchipelagoModifiers.cardplaysAdjustment = (int)loginSuccess.SlotData["base_cardplay_offset"] + gottenItems.Where(name => name == Globals.PLUS_CARDPLAYS_NAME).Count(); //TODO add gotten checks
-        var LockedCards = ((string)loginSuccess.SlotData["base_locekd_cards"]).Split(",").ToHashSet();
-        LockedCards.RemoveWhere(name => gottenItems.Contains(name));
-        ArchipelagoModifiers.LockedCards = LockedCards;
-        goals = ((string)loginSuccess.SlotData["goals"]).Split(",").Select(goal => session.Locations.GetLocationIdFromName(Globals.GAME_NAME, goal)).ToHashSet();
+        logger.LogMessage($"Gotten items are {string.Join("", gottenItems)}");
+        logger.LogMessage($"SlotData: {loginSuccess.SlotData.Join()}");
+        
+        ArchipelagoModifiers.energyAdjustment = Convert.ToInt32(loginSuccess.SlotData["base_energy_offset"]) + gottenItems.Count(name => name == Globals.PLUS_ENERGY_NAME);
+        ArchipelagoModifiers.cardplaysAdjustment = Convert.ToInt32(loginSuccess.SlotData["base_cardplay_offset"]) + gottenItems.Count(name => name == Globals.PLUS_CARDPLAYS_NAME);
+        ArchipelagoModifiers.BaseLockedCards = ((JArray)loginSuccess.SlotData["base_locked_cards"]).Values<string>().OfType<string>().ToHashSet();
+        
+        goals = ((JArray)loginSuccess.SlotData["goals"]).Values<string>().ToList().Select(goal => session.Locations.GetLocationIdFromName(Globals.GAME_NAME, goal)).ToHashSet();
 
-        if ((bool)loginSuccess.SlotData["deathlink"])
+        Deathlink = Convert.ToInt32(loginSuccess.SlotData["deathlink"]);
+        if (Deathlink == 1)
         {
             deathLinkService.EnableDeathLink();
         }
         return null;
     }
 
-    public static void cardPlayed(string cardName)
+    public static void CardPlayed(string cardName)
     {
-        logger.LogMessage($"{cardName} played");
-        string locationName = $"Play: {cardName}";
-        checkLocation(locationName);
+        logger.LogInfo($"{cardName} played");
+        string locationName = $"{Globals.PLAY_CARD_PREFIX}{cardName}";
+        CheckLocation(locationName);
     }
 
-    public static void checkLocation(string name)
+    public static void CheckLocation(string name)
     {
+        logger.LogInfo($"Checking location: {name}");
         if (session?.Socket.Connected == true)
         {
             var id = session.Locations.GetLocationIdFromName(Globals.GAME_NAME, name);
             session.Locations.CompleteLocationChecks(id);
-            checkGoalCompletion();
+            CheckGoalCompletion();
         }
         else
         {
@@ -150,8 +172,13 @@ public static class ArchipelagoMessenger
         }
     }
 
-    public static void checkGoalCompletion()
+    public static void CheckGoalCompletion()
     {
+        if (session != null)
+        {
+            SimpleUI.SetCheckedLocations(session.Locations.AllLocationsChecked);
+            logger.LogInfo($"Checking for goal completion ::: goals: {string.Join(",", goals)}, checked locations: {string.Join(",", session.Locations.AllLocationsChecked)}");
+        }
         if (session?.Socket.Connected == true && goals.IsSubsetOf(session.Locations.AllLocationsChecked))
         {
             session.SetGoalAchieved();
@@ -160,18 +187,18 @@ public static class ArchipelagoMessenger
 
     public static void AdversairyDefeated(string AdversairyName, int difficulty, string spirit)
     {
-        logger.LogMessage($"defeated {AdversairyName} on difficulty {difficulty} with {spirit}");
+        logger.LogInfo($"defeated {AdversairyName} with {spirit} on difficulty {difficulty}");
         for (var i = 0; i <= difficulty; i++)
         {
-            string locationName = $"Defeat {AdversairyName} on difficulty {difficulty} with {spirit}";
-            checkLocation(locationName);
+            string locationName = $"Defeat {AdversairyName} with {spirit} on difficulty {i}";
+            CheckLocation(locationName);
         }
     }
 
-    public static void gameLost()
+    public static void GameLost()
     {
-        logger.LogMessage($"Player died, sending deathlink");
-        if (deathLinkService == null || session == null) return;
+        logger.LogInfo($"Player died{(Deathlink == 0 ? "" : ", sending deathlink")}");
+        if (deathLinkService == null || session == null || Deathlink == 0) return;
         deathLinkService.SendDeathLink(new DeathLink(session.Players.ActivePlayer.Alias, "Failed to protect the island"));
     }
 
@@ -179,21 +206,43 @@ public static class ArchipelagoMessenger
     {
         for (var i = 0; i < queuedLocations.Count; i++)
         {
-            checkLocation(queuedLocations.Dequeue());
+            CheckLocation(queuedLocations.Dequeue());
         }
+    }
+
+    public static ReadOnlyCollection<long> AllLocationsChecked()
+    {
+        if (session == null)
+        {
+            return new List<long>().AsReadOnly();
+        }
+        return session.Locations.AllLocationsChecked;
+    }
+
+    public static HashSet<long> Goals()
+    {
+        if (session == null)
+        {
+            return [];
+        }
+        return goals;
     }
 }
 
 public class SimpleUI : MonoBehaviour
 {
-    private Rect windowRect = new Rect(20, 20, 250, 240);
+    private Rect windowRect = new(20, 20, 230, 240);
     private bool showWindow = true;
     public static bool connected = false;
     private string? error = null;
 
+    private bool goalsOpen = false;
+    private Vector2 scroll = Vector2.zero;
     string room = "archipelago.gg:";
     string slotName = "";
     string password = "";
+
+    private static ReadOnlyCollection<long> checkedLocations = new List<long>().AsReadOnly();
 
     void Update()
     {
@@ -205,18 +254,35 @@ public class SimpleUI : MonoBehaviour
     {
         if (!showWindow) return;
 
-        // Make UI scale-independent
         GUI.depth = 0;
-        windowRect = GUI.Window(12345, windowRect, DrawWindow, "Archipelago");
+        windowRect = GUILayout.Window(1, windowRect, DrawWindow, "Archipelago", GUILayout.MinHeight(120), GUILayout.MaxHeight(1000));
     }
 
     void DrawWindow(int id)
     {
         if (connected)
         {
+            scroll = GUILayout.BeginScrollView(scroll);
             GUILayout.Label("Connected");
             GUILayout.Label($"Energy offset: {ArchipelagoModifiers.energyAdjustment}");
             GUILayout.Label($"Cardplays offset: {ArchipelagoModifiers.cardplaysAdjustment}");
+
+            goalsOpen = GUILayout.Toggle(goalsOpen, (goalsOpen ? "▼" : "▶") + " Remaining Goals", "Button");
+            if (goalsOpen)
+            {
+                GUILayout.BeginVertical("box");
+                foreach (var goal in ArchipelagoMessenger.Goals())
+                {
+                    var completed = checkedLocations.Contains(goal);
+                    if (!completed)
+                    {
+                        var name = ArchipelagoMessenger.session?.Locations.GetLocationNameFromId(goal) ?? "Unable to fetch item name";
+                        GUILayout.Label(name);
+                    }
+                }
+                GUILayout.EndVertical();
+            }
+            GUILayout.EndScrollView();
         }
         else
         {
@@ -244,6 +310,11 @@ public class SimpleUI : MonoBehaviour
 
         GUI.DragWindow();
     }
+
+    public static void SetCheckedLocations(ReadOnlyCollection<long> set)
+    {
+        checkedLocations = set;
+    }
 }
 
 [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
@@ -253,29 +324,52 @@ public class Plugin : BaseUnityPlugin
 
     private void Awake()
     {
-        // Plugin startup logic
         var harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
         Logger = base.Logger;
+        var DisableMod = Config.Bind("General", "DisableMod", false, "Temporarily disables the Archipelago mod without uninstalling.");
+        if (DisableMod.Value)
+        {
+            Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is disabled!");
+            return;
+        }
         Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
         harmony.PatchAll();
         gameObject.AddComponent<SimpleUI>();
     }
 }
 
-[HarmonyPatch(typeof(PowerController), nameof(PowerController.UsePower))]
-public class power_activation_patch
+[HarmonyPatch]
+public class Power_activation_patch
 {
+    static IEnumerable<System.Reflection.MethodBase> TargetMethods()
+    {
+        var baseType = typeof(PowerController);
+
+        foreach (var type in baseType.Assembly.GetTypes())
+        {
+            if (!baseType.IsAssignableFrom(type))
+                continue;
+
+            var method = AccessTools.Method(
+                type,
+                "UsePower",
+                [typeof(BaseController), typeof(PowerUse)]
+            );
+
+            if (method != null)
+                yield return method;
+        }
+    }
     static void Prefix(PowerController __instance)
     {
-        ArchipelagoMessenger.cardPlayed(__instance.Title);
+        ArchipelagoMessenger.CardPlayed(__instance.Title);
     }
 }
 
 [HarmonyPatch(typeof(GameController), nameof(GameController.GameOver))]
 public class End_patch
 {
-    static readonly HashSet<EndingResult> wins = new() { EndingResult.WinSacrificeVictory, EndingResult.WinTerrorVictory, EndingResult.WinScenario, EndingResult.WinInvadersDestroyed };
-
+    static readonly HashSet<EndingResult> wins = [EndingResult.WinSacrificeVictory, EndingResult.WinTerrorVictory, EndingResult.WinScenario, EndingResult.WinInvadersDestroyed];
     static void Prefix(GameController __instance, EndingResult endingResult)
     {
         var logger = Logger.CreateLogSource("end_patch");
@@ -283,9 +377,9 @@ public class End_patch
 
         if (wins.Contains(endingResult))
         {
-            logger.LogMessage("game won!");
+            logger.LogInfo("game won!");
             var spirits = __instance.SpiritControllers.Select(sc => sc.TitleWithAspect).ToList();
-            logger.LogMessage($"Spirits that won are {string.Join(",", spirits)}");
+            logger.LogInfo($"Spirits that won are {string.Join(",", spirits)}");
             foreach (var adversary in __instance.AdversaryControllers)
             {
                 foreach (var spirit in spirits)
@@ -296,7 +390,7 @@ public class End_patch
         }
         else
         {
-            ArchipelagoMessenger.gameLost();
+            ArchipelagoMessenger.GameLost();
         }
     }
 }
@@ -304,9 +398,24 @@ public class End_patch
 [HarmonyPatch(typeof(GameController), nameof(GameController.CheckForGameOver))]
 public class Update_patch
 {
+    private static readonly ManualLogSource logger = Logger.CreateLogSource("Update_patch");
     static void Postfix(GameController __instance)
     {
-        var allowedMinorCards = __instance.OutOfGame.CardControllers.Where(card => card.IsMinorPowerCard && !ArchipelagoModifiers.LockedCards.Contains(card.Title));
+        logger.LogInfo($"moving cards (update)");
+        var disallowedCards = __instance.MinorPowerDeck.CardControllers
+            .Concat(__instance.MinorPowerDiscard.CardControllers)
+            .Concat(__instance.MajorPowerDeck.CardControllers)
+            .Concat(__instance.MajorPowerDiscard.CardControllers)
+            .Where(card => ArchipelagoModifiers.LockedCards().Contains(card.Title));
+        if (disallowedCards.Any())
+        {
+            MoveCardsAction moveCardsAction = __instance.MoveCards(null, MoveCardReason.Debugging, disallowedCards, __instance.OutOfGame);
+            var enumerator = __instance.DoAction(moveCardsAction, true, true);
+            __instance.ExhaustCoroutine(enumerator);
+            __instance.StartCoroutine(enumerator);
+        }
+
+        var allowedMinorCards = __instance.OutOfGame.CardControllers.Where(card => card.IsMinorPowerCard && !ArchipelagoModifiers.LockedCards().Contains(card.Title));
         if (allowedMinorCards.Any())
         {
             MoveCardsAction moveCardsAction = __instance.MoveCards(null, MoveCardReason.Debugging, allowedMinorCards, __instance.MinorPowerDeck);
@@ -315,7 +424,7 @@ public class Update_patch
             __instance.StartCoroutine(enumerator);
         }
 
-        var allowedMajorCards = __instance.OutOfGame.CardControllers.Where(card => card.IsMajorPowerCard && !ArchipelagoModifiers.LockedCards.Contains(card.Title));
+        var allowedMajorCards = __instance.OutOfGame.CardControllers.Where(card => card.IsMajorPowerCard && !ArchipelagoModifiers.LockedCards().Contains(card.Title));
         if (allowedMajorCards.Any())
         {
             MoveCardsAction moveCardsAction = __instance.MoveCards(null, MoveCardReason.Debugging, allowedMajorCards, __instance.MajorPowerDeck);
@@ -323,25 +432,11 @@ public class Update_patch
             __instance.ExhaustCoroutine(enumerator);
             __instance.StartCoroutine(enumerator);
         }
+        var remaining = __instance.MinorPowerDeck.CardControllers
+            .Concat(__instance.MinorPowerDiscard.CardControllers)
+            .Concat(__instance.MajorPowerDeck.CardControllers)
+            .Concat(__instance.MajorPowerDiscard.CardControllers);
     }
-}
-
-[HarmonyPatch(typeof(GameController), nameof(GameController.StartGame))]
-public class Shuffle_patch
-{
-
-    [HarmonyPostfix]
-    static void Postfix(GameController __instance)
-    {
-        var logger = Logger.CreateLogSource("shuffle_patch");
-        logger.LogMessage($"moving cards");
-        var allowedCards = __instance.MajorPowerDeck.CardControllers.Concat(__instance.MinorPowerDeck.CardControllers).Where(card => !ArchipelagoModifiers.LockedCards.Contains(card.Title));
-        MoveCardsAction moveCardsAction = __instance.MoveCards(null, MoveCardReason.Debugging, allowedCards, __instance.OutOfGame);
-        var enumerator = __instance.DoAction(moveCardsAction, true, true);
-        __instance.ExhaustCoroutine(enumerator);
-        __instance.StartCoroutine(enumerator);
-    }
-
 }
 
 [HarmonyPatch(typeof(SpiritController), nameof(SpiritController.GetEnergyPerTurn))]
