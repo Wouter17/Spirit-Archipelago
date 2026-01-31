@@ -23,14 +23,15 @@ public static class Globals
     public const string PLUS_CARDPLAYS_NAME = "+1 Cardplay";
     public const string PLAY_CARD_PREFIX = "Play: ";
     public const string GAME_NAME = "Spirit Island";
+    public const string ANY_SPIRIT = "Any";
 }
 
 public static class ArchipelagoModifiers
 {
     // public static HashSet<string> LockedCards = [];
 
-    public static HashSet<string> BaseLockedCards {get; set;} = [];
-    public static HashSet<string> GottenItems {get; set;} = [];
+    public static HashSet<string> BaseLockedCards { get; set; } = [];
+    public static HashSet<string> GottenItems { get; set; } = [];
     public static int energyAdjustment = 0;
     public static int cardplaysAdjustment = 0;
 
@@ -49,7 +50,7 @@ public static class ArchipelagoMessenger
     static readonly Queue<string> queuedLocations = new();
     static HashSet<long> goals = [-1];
 
-    public static int Deathlink {get; private set;} = 0;
+    public static int Deathlink { get; private set; } = 0;
 
     public static void InitialiseSession(ref ArchipelagoSession session, ref DeathLinkService deathLinkService)
     {
@@ -135,11 +136,11 @@ public static class ArchipelagoMessenger
         var gottenItems = session.Items.AllItemsReceived.Select(item => item.ItemName);
         logger.LogMessage($"Gotten items are {string.Join("", gottenItems)}");
         logger.LogMessage($"SlotData: {loginSuccess.SlotData.Join()}");
-        
+
         ArchipelagoModifiers.energyAdjustment = Convert.ToInt32(loginSuccess.SlotData["base_energy_offset"]) + gottenItems.Count(name => name == Globals.PLUS_ENERGY_NAME);
         ArchipelagoModifiers.cardplaysAdjustment = Convert.ToInt32(loginSuccess.SlotData["base_cardplay_offset"]) + gottenItems.Count(name => name == Globals.PLUS_CARDPLAYS_NAME);
         ArchipelagoModifiers.BaseLockedCards = ((JArray)loginSuccess.SlotData["base_locked_cards"]).Values<string>().OfType<string>().ToHashSet();
-        
+
         goals = ((JArray)loginSuccess.SlotData["goals"]).Values<string>().ToList().Select(goal => session.Locations.GetLocationIdFromName(Globals.GAME_NAME, goal)).ToHashSet();
 
         Deathlink = Convert.ToInt32(loginSuccess.SlotData["deathlink"]);
@@ -192,6 +193,9 @@ public static class ArchipelagoMessenger
         {
             string locationName = $"Defeat {AdversairyName} with {spirit} on difficulty {i}";
             CheckLocation(locationName);
+
+            string anyLocationName = $"Defeat {AdversairyName} with {Globals.ANY_SPIRIT} on difficulty {i}";
+            CheckLocation(anyLocationName);
         }
     }
 
