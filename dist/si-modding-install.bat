@@ -7,7 +7,7 @@ setlocal
 set DIST_DIR="%~dp0"
 set NO_PAUSE=%~1
 
-set STEAM_BEPINEX_VER=BepInEx_x64_5.4.23.4
+set STEAM_BEPINEX_VER=BepInEx_win_x64_5.4.23.4
 
 echo.
 echo Spirit Island Archipelago Mod Installer
