@@ -1,8 +1,8 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Reflection.Emit;
 using Archipelago.MultiClient.Net;
 using Archipelago.MultiClient.Net.BounceFeatures.DeathLink;
 using Archipelago.MultiClient.Net.Enums;
@@ -10,6 +10,7 @@ using BepInEx;
 using BepInEx.Logging;
 using Handelabra.SpiritIsland.Engine;
 using Handelabra.SpiritIsland.Engine.Controller;
+using Handelabra.SpiritIsland.Engine.Model;
 using HarmonyLib;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
@@ -21,6 +22,7 @@ public static class Globals
 {
     public const string PLUS_ENERGY_NAME = "+1 Energy";
     public const string PLUS_CARDPLAYS_NAME = "+1 Cardplay";
+    public const string PLUS_BLIGHT_NAME = "+1 Blight";
     public const string PLAY_CARD_PREFIX = "Play: ";
     public const string GAME_NAME = "Spirit Island";
     public const string ANY_SPIRIT = "Any";
@@ -34,6 +36,7 @@ public static class ArchipelagoModifiers
     public static HashSet<string> GottenItems { get; set; } = [];
     public static int energyAdjustment = 0;
     public static int cardplaysAdjustment = 0;
+    public static int blightAdjustment = 0;
 
     public static HashSet<string> LockedCards()
     {
@@ -74,6 +77,10 @@ public static class ArchipelagoMessenger
             else if (itemName == Globals.PLUS_CARDPLAYS_NAME)
             {
                 ArchipelagoModifiers.cardplaysAdjustment++;
+            }
+            else if (itemName == Globals.PLUS_BLIGHT_NAME)
+            {
+                ArchipelagoModifiers.blightAdjustment++;
             }
             else
             {
@@ -139,6 +146,7 @@ public static class ArchipelagoMessenger
 
         ArchipelagoModifiers.energyAdjustment = Convert.ToInt32(loginSuccess.SlotData["base_energy_offset"]) + gottenItems.Count(name => name == Globals.PLUS_ENERGY_NAME);
         ArchipelagoModifiers.cardplaysAdjustment = Convert.ToInt32(loginSuccess.SlotData["base_cardplay_offset"]) + gottenItems.Count(name => name == Globals.PLUS_CARDPLAYS_NAME);
+        ArchipelagoModifiers.blightAdjustment = Convert.ToInt32(loginSuccess.SlotData["base_blight_offset"]) + gottenItems.Count(name => name == Globals.PLUS_BLIGHT_NAME);
         ArchipelagoModifiers.BaseLockedCards = ((JArray)loginSuccess.SlotData["base_locked_cards"]).Values<string>().OfType<string>().ToHashSet();
 
         goals = ((JArray)loginSuccess.SlotData["goals"]).Values<string>().ToList().Select(goal => session.Locations.GetLocationIdFromName(Globals.GAME_NAME, goal)).ToHashSet();
@@ -270,6 +278,7 @@ public class SimpleUI : MonoBehaviour
             GUILayout.Label("Connected");
             GUILayout.Label($"Energy offset: {ArchipelagoModifiers.energyAdjustment}");
             GUILayout.Label($"Cardplays offset: {ArchipelagoModifiers.cardplaysAdjustment}");
+            GUILayout.Label($"Blight offset: {ArchipelagoModifiers.blightAdjustment}");
 
             goalsOpen = GUILayout.Toggle(goalsOpen, (goalsOpen ? "▼" : "▶") + " Remaining Goals", "Button");
             if (goalsOpen)
@@ -460,5 +469,50 @@ public class Cardplays_patch
     static int Postfix(int cardplays)
     {
         return Math.Max(1, cardplays + ArchipelagoModifiers.cardplaysAdjustment);
+    }
+}
+
+[HarmonyPatch(typeof(Game), nameof(Game.CreateBlightCard), [typeof(string), typeof(IEnumerable<string>), typeof(bool)])]
+public class Blight_patch
+{
+    static readonly ManualLogSource logger = Logger.CreateLogSource("Blight_patch");
+
+    static IEnumerable<CodeInstruction> Transpiler(
+        IEnumerable<CodeInstruction> instructions)
+    {
+        var codes = new List<CodeInstruction>(instructions);
+
+        var target = AccessTools.Method(
+            typeof(PieceFactory),
+            nameof(PieceFactory.CreateBlightPieces),
+            [typeof(Game), typeof(int)]
+        );
+
+        var adjustMethod = AccessTools.Method(
+            typeof(Blight_patch),
+            nameof(AdjustCount)
+        );
+
+        for (int i = 0; i < codes.Count; i++)
+        {
+            if (codes[i].Calls(target))
+            {
+                // Insert call before CreateBlightPieces
+                codes.Insert(i,
+                    new CodeInstruction(OpCodes.Call, adjustMethod)
+                );
+
+                i++;
+            }
+        }
+
+        return codes;
+    }
+
+    static int AdjustCount(int NumberOfBlight)
+    {
+        int newBlightCount = Math.Max(1, NumberOfBlight + ArchipelagoModifiers.blightAdjustment);
+        logger.LogInfo($"Original blight is {NumberOfBlight}, setting blight to {newBlightCount}");
+        return newBlightCount;
     }
 }
