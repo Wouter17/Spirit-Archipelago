@@ -316,6 +316,11 @@ public class SimpleUI : MonoBehaviour
                     connected = true;
                 }
             }
+
+            if (GUILayout.Button("Exit"))
+            {
+                Plugin.Exit();
+            }
         }
 
         if (error != null)
@@ -334,10 +339,13 @@ public class SimpleUI : MonoBehaviour
 public class Plugin : BaseUnityPlugin
 {
     internal static new ManualLogSource? Logger;
+    private static Harmony? harmony;
+
+    private static SimpleUI? ui;
 
     private void Awake()
     {
-        var harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
+        harmony  = new Harmony(MyPluginInfo.PLUGIN_GUID);
         Logger = base.Logger;
         var DisableMod = Config.Bind("General", "DisableMod", false, "Temporarily disables the Archipelago mod without uninstalling.");
         if (DisableMod.Value)
@@ -347,7 +355,16 @@ public class Plugin : BaseUnityPlugin
         }
         Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
         harmony.PatchAll();
-        gameObject.AddComponent<SimpleUI>();
+        ui = gameObject.AddComponent<SimpleUI>();
+    }
+
+    public static void Exit()
+    {
+        if (ui != null)
+        {
+            Destroy(ui);
+        }
+        harmony?.UnpatchSelf();
     }
 }
 
