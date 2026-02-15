@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>Archipelago</AssemblyName>
     <Product>Spirit Archipelago</Product>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -36,6 +36,14 @@
   <ItemGroup>
     <Reference Include="SpiritIslandEngine">
       <HintPath>lib\SpiritIslandEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MainAssembly">
+      <HintPath>lib\MainAssembly.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>lib\UnityEngine.UI.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

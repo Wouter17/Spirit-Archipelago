@@ -46,7 +46,9 @@ _This setup guide assumes you are running Archipelago from source (python files 
 2. Copy the following DLLs to `\lib\`:
 
 ```
+MainAssembly.dll
 SpiritIslandEngine.dll
+UnityEngine.UI.dll
 ```
 
 3. Build

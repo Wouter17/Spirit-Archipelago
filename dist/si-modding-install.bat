@@ -45,16 +45,20 @@ goto :EOF
 set GAME_DIR="%~dp1"
 set BEPINEX_DIR="%~dp1\BepInEx\"
 set PLUGINS_DIR="%~dp1\BepInEx\plugins"
+set ASSETS_DIR="%~dp1\BepInEx\plugins\assets"
 
 echo Installing 'Spirit Island Archipelago' into %PLUGINS_DIR%...
 echo.
 
 if not exist %BEPINEX_DIR% mkdir %BEPINEX_DIR%
 if not exist %PLUGINS_DIR% mkdir %PLUGINS_DIR%
+if not exist %ASSETS_DIR% mkdir %ASSETS_DIR%
 
 xcopy %DIST_DIR%\%STEAM_BEPINEX_VER% %GAME_DIR% /y /q /s /e
 
 xcopy %DIST_DIR%\*.dll %PLUGINS_DIR% /y /q
+
+xcopy %DIST_DIR%\assets %ASSETS_DIR% /y /q /s /e
 
 xcopy %DIST_DIR%\si-modding-uninstall.bat %GAME_DIR% /y /q
 

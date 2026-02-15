@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Reflection.Emit;
+using System.Text.RegularExpressions;
 using Archipelago.MultiClient.Net;
 using Archipelago.MultiClient.Net.BounceFeatures.DeathLink;
 using Archipelago.MultiClient.Net.Enums;
@@ -11,9 +13,11 @@ using BepInEx.Logging;
 using Handelabra.SpiritIsland.Engine;
 using Handelabra.SpiritIsland.Engine.Controller;
 using Handelabra.SpiritIsland.Engine.Model;
+using Handelabra.SpiritIsland.View;
 using HarmonyLib;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
+using UnityEngine.UI;
 using Logger = BepInEx.Logging.Logger;
 
 namespace Archipelago;
@@ -33,6 +37,8 @@ public static class ArchipelagoModifiers
     // public static HashSet<string> LockedCards = [];
 
     public static HashSet<string> BaseLockedCards { get; set; } = [];
+    public static HashSet<string> BaseLockedSpirits { get; set; } = [];
+    public static HashSet<string> BaseLockedAspects { get; set; } = [];
     public static HashSet<string> GottenItems { get; set; } = [];
     public static int energyAdjustment = 0;
     public static int cardplaysAdjustment = 0;
@@ -42,6 +48,22 @@ public static class ArchipelagoModifiers
     {
         var logger = Logger.CreateLogSource("ArchipelagoModifiers");
         return BaseLockedCards.Except(GottenItems).ToHashSet();
+    }
+
+    public static HashSet<string> LockedSpirits()
+    {
+        return BaseLockedSpirits.Except(GottenItems).Select(s => RemoveSpecial(s.ToLower())).ToHashSet();
+    }
+
+    public static HashSet<string> LockedAspects()
+    {
+        return BaseLockedAspects.Except(GottenItems).Select(a => RemoveSpecial(a.ToLower())).ToHashSet();
+    }
+
+    private static readonly Regex sWhitespace = new Regex(@"[^A-Za-z]");
+    public static string RemoveSpecial(string input)
+    {
+        return sWhitespace.Replace(input, "");
     }
 }
 
@@ -84,10 +106,8 @@ public static class ArchipelagoMessenger
             }
             else
             {
-                logger.LogInfo($"Adding {itemName} to allowed cards");
+                logger.LogInfo($"Adding {itemName} to allowed items");
                 ArchipelagoModifiers.GottenItems.Add(itemName);
-                // ArchipelagoModifiers.LockedCards.Remove(itemName);
-                // logger.LogInfo($"Cards not allowed are {string.Join(",", ArchipelagoModifiers.LockedCards)}"); //TODO make debug log
             }
 
             receivedItemsHelper.DequeueItem();
@@ -148,6 +168,8 @@ public static class ArchipelagoMessenger
         ArchipelagoModifiers.cardplaysAdjustment = Convert.ToInt32(loginSuccess.SlotData["base_cardplay_offset"]) + gottenItems.Count(name => name == Globals.PLUS_CARDPLAYS_NAME);
         ArchipelagoModifiers.blightAdjustment = Convert.ToInt32(loginSuccess.SlotData["base_blight_offset"]) + gottenItems.Count(name => name == Globals.PLUS_BLIGHT_NAME);
         ArchipelagoModifiers.BaseLockedCards = ((JArray)loginSuccess.SlotData["base_locked_cards"]).Values<string>().OfType<string>().ToHashSet();
+        ArchipelagoModifiers.BaseLockedSpirits = ((JArray)loginSuccess.SlotData["base_locked_spirits"]).Values<string>().OfType<string>().ToHashSet();
+        ArchipelagoModifiers.BaseLockedAspects = ((JArray)loginSuccess.SlotData["base_locked_aspects"]).Values<string>().OfType<string>().ToHashSet();
 
         goals = ((JArray)loginSuccess.SlotData["goals"]).Values<string>().ToList().Select(goal => session.Locations.GetLocationIdFromName(Globals.GAME_NAME, goal)).ToHashSet();
 
@@ -345,7 +367,7 @@ public class Plugin : BaseUnityPlugin
 
     private void Awake()
     {
-        harmony  = new Harmony(MyPluginInfo.PLUGIN_GUID);
+        harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
         Logger = base.Logger;
         var DisableMod = Config.Bind("General", "DisableMod", false, "Temporarily disables the Archipelago mod without uninstalling.");
         if (DisableMod.Value)
@@ -531,5 +553,118 @@ public class Blight_patch
         int newBlightCount = Math.Max(1, NumberOfBlight + ArchipelagoModifiers.blightAdjustment);
         logger.LogInfo($"Original blight is {NumberOfBlight}, setting blight to {newBlightCount}");
         return newBlightCount;
+    }
+}
+
+[HarmonyPatch(typeof(DLCHelper), nameof(DLCHelper.IsSpiritPlayable))]
+public class Spirit_patch
+{
+    public static HashSet<string> notBought = [];
+    static void Prefix(out string __state, string identifier)
+    {
+        __state = identifier;
+    }
+    static bool Postfix(bool __result, string __state)
+    {
+        if (!__result)
+        {
+            notBought.Add(__state);
+        }
+        return __result && !ArchipelagoModifiers.LockedSpirits().Contains(__state.ToLower());
+    }
+}
+
+[HarmonyPatch(typeof(DLCHelper), nameof(DLCHelper.GetAllPlayableAspectsForSpirit))]
+public class Aspect_patch
+{
+    static IEnumerable<string> Postfix(IEnumerable<string> __result)
+    {
+        return __result.Where(a => !ArchipelagoModifiers.LockedAspects().Contains(a.ToLower()));
+    }
+}
+
+[HarmonyPatch(typeof(NewGameViewController), nameof(NewGameViewController.ShowPurchasePanel))]
+public class Purchase_panel_patch
+{
+    static bool Prefix(SpiritController spirit)
+    {
+        if (Spirit_patch.notBought.Contains(spirit.Identifier))
+        {
+            return true;
+        }
+        return false;
+    }
+}
+
+[HarmonyPatch(typeof(NewGameSpiritItemView), nameof(NewGameSpiritItemView.Configure))]
+class NewGameSpiritItemView_patch
+{
+    static readonly ManualLogSource logger = Logger.CreateLogSource("NewGameSpiritItemView_patch");
+    static readonly string[] targets = ["Buy Button", "Requires Purchase Indicator"];
+
+    static void Postfix(NewGameSpiritItemView __instance)
+    {
+        if (Spirit_patch.notBought.Contains(__instance.SpiritIdentifier) || !ArchipelagoModifiers.LockedSpirits().Contains(__instance.SpiritIdentifier.ToLower()))
+        {
+            return;
+        }
+
+        // __instance is the NewGameSpiritItemView object
+        var go = (__instance as MonoBehaviour)?.gameObject;
+        if (go == null) return;
+
+
+        foreach (Transform child in go.transform)
+        {
+            if (targets.Contains(child.gameObject.name))
+            {
+                var gc = child.gameObject;
+                gc.SetActive(false);
+            }
+        }
+
+        GameObject logoGO = new GameObject("ArchipelagoLogo");
+
+        // Parent to root
+        logoGO.transform.SetParent(go.transform, false);
+
+        // Add Image component
+        Image img = logoGO.AddComponent<Image>();
+
+        // Assign sprite
+        img.sprite = LoadLogo();
+        var color = img.color;
+        color.a = .75f;
+        img.color = color;
+
+        // Adjust position/size
+        RectTransform rt = logoGO.GetComponent<RectTransform>();
+        rt.anchoredPosition = new Vector2(0, 10);
+        rt.sizeDelta = new Vector2(100, 100);
+        rt.localScale = Vector3.one;
+    }
+
+    public static Sprite? LoadLogo()
+    {
+        string path = Path.Combine(Paths.PluginPath, "./assets/archipelago_logo.png");
+
+        if (!File.Exists(path))
+        {
+            logger.LogWarning($"Logo not found at {path}");
+            return null;
+        }
+
+        byte[] bytes = File.ReadAllBytes(path);
+        Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+        tex.LoadImage(bytes); // load PNG into Texture2D
+
+        // Create a sprite from the texture
+        Sprite sprite = Sprite.Create(
+            tex,
+            new Rect(0, 0, tex.width, tex.height),
+            new Vector2(0.5f, 0.5f) // pivot center
+        );
+
+        return sprite;
     }
 }
