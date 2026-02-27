@@ -432,11 +432,11 @@ public class End_patch
             logger.LogInfo("game won!");
             var spirits = __instance.SpiritControllers.Select(sc => sc.TitleWithAspect).ToList();
             logger.LogInfo($"Spirits that won are {string.Join(",", spirits)}");
-            foreach (var adversary in __instance.AdversaryControllers)
+            foreach (var adversary in __instance.Game.Adversaries ?? [])
             {
                 foreach (var spirit in spirits)
                 {
-                    ArchipelagoMessenger.AdversairyDefeated(adversary.Title, adversary.Adversary.Level.GetValueOrDefault(), spirit);
+                    ArchipelagoMessenger.AdversairyDefeated(adversary.Title, adversary.Level.GetValueOrDefault(), spirit);
                 }
             }
         }
