@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using Archipelago.MultiClient.Net;
 using Archipelago.MultiClient.Net.BounceFeatures.DeathLink;
 using Archipelago.MultiClient.Net.Enums;
+using Archipelago.MultiClient.Net.Models;
 using BepInEx;
 using BepInEx.Logging;
 using Handelabra.SpiritIsland.Engine;
@@ -30,6 +31,7 @@ public static class Globals
     public const string PLAY_CARD_PREFIX = "Play: ";
     public const string GAME_NAME = "Spirit Island";
     public const string ANY_SPIRIT = "Any";
+    public const string GOALS_STORE_LOCATION = "goalsAchieved";
 }
 
 public static class ArchipelagoModifiers
@@ -172,6 +174,12 @@ public static class ArchipelagoMessenger
         ArchipelagoModifiers.BaseLockedAspects = ((JArray)loginSuccess.SlotData["base_locked_aspects"]).Values<string>().OfType<string>().ToHashSet();
 
         goals = ((JArray)loginSuccess.SlotData["goals"]).Values<string>().ToList().Select(goal => session.Locations.GetLocationIdFromName(Globals.GAME_NAME, goal)).ToHashSet();
+        session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION] = JArray.FromObject(new int[] { });
+        session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION].OnValueChanged += (_, newVal, _) =>
+        {
+            var goals = newVal?.ToObject<long[]>() ?? [];
+            CheckGoalCompletion(goals);
+        };
 
         Deathlink = Convert.ToInt32(loginSuccess.SlotData["deathlink"]);
         if (Deathlink == 1)
@@ -195,7 +203,11 @@ public static class ArchipelagoMessenger
         {
             var id = session.Locations.GetLocationIdFromName(Globals.GAME_NAME, name);
             session.Locations.CompleteLocationChecks(id);
-            CheckGoalCompletion();
+            var achievedGoals = session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION].To<long[]>();
+            if (!achievedGoals.Contains(id))
+            {
+                session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION] = JArray.FromObject(achievedGoals.Append(id));
+            }
         }
         else
         {
@@ -203,14 +215,14 @@ public static class ArchipelagoMessenger
         }
     }
 
-    public static void CheckGoalCompletion()
+    public static void CheckGoalCompletion(long[] locationsAchieved)
     {
         if (session != null)
         {
             SimpleUI.SetCheckedLocations(session.Locations.AllLocationsChecked);
-            logger.LogInfo($"Checking for goal completion ::: goals: {string.Join(",", goals)}, checked locations: {string.Join(",", session.Locations.AllLocationsChecked)}");
+            logger.LogInfo($"Checking for goal completion ::: goals: {string.Join(",", goals)}, checked locations: {string.Join(",", locationsAchieved)}");
         }
-        if (session?.Socket.Connected == true && goals.IsSubsetOf(session.Locations.AllLocationsChecked))
+        if (session?.Socket.Connected == true && goals.IsSubsetOf(locationsAchieved))
         {
             session.SetGoalAchieved();
         }
