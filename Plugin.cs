@@ -1,10 +1,12 @@
-using System;
+﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reflection.Emit;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using Archipelago.MultiClient.Net;
 using Archipelago.MultiClient.Net.BounceFeatures.DeathLink;
 using Archipelago.MultiClient.Net.Enums;
@@ -69,6 +71,13 @@ public static class ArchipelagoModifiers
     }
 }
 
+enum HintCardsOption
+{
+    None = 0,
+    OnHover = 1,
+    Always = 2
+}
+
 public static class ArchipelagoMessenger
 {
     static readonly ManualLogSource logger = Logger.CreateLogSource("ArchipelagoMessenger");
@@ -76,6 +85,8 @@ public static class ArchipelagoMessenger
     static DeathLinkService? deathLinkService;
     static readonly Queue<string> queuedLocations = new();
     static HashSet<long> goals = [-1];
+    public static bool spoilLocations = true;
+    private static HintCardsOption hintCards = HintCardsOption.Always;
 
     public static int Deathlink { get; private set; } = 0;
 
@@ -110,6 +121,14 @@ public static class ArchipelagoMessenger
             {
                 logger.LogInfo($"Adding {itemName} to allowed items");
                 ArchipelagoModifiers.GottenItems.Add(itemName);
+
+                var nameIfCard = $"{Globals.PLAY_CARD_PREFIX}{itemName}";
+                var itemId = ArchipelagoMessenger.session?.Locations.GetLocationIdFromName(Globals.GAME_NAME, nameIfCard);
+                if (itemId is long id && id != -1)
+                {
+                    // Run on seperate thread to prevent double block on main loop
+                    _ = Task.Run(() => scout(id));
+                }
             }
 
             receivedItemsHelper.DequeueItem();
@@ -172,6 +191,9 @@ public static class ArchipelagoMessenger
         ArchipelagoModifiers.BaseLockedCards = ((JArray)loginSuccess.SlotData["base_locked_cards"]).Values<string>().OfType<string>().ToHashSet();
         ArchipelagoModifiers.BaseLockedSpirits = ((JArray)loginSuccess.SlotData["base_locked_spirits"]).Values<string>().OfType<string>().ToHashSet();
         ArchipelagoModifiers.BaseLockedAspects = ((JArray)loginSuccess.SlotData["base_locked_aspects"]).Values<string>().OfType<string>().ToHashSet();
+        spoilLocations = Convert.ToBoolean(loginSuccess.SlotData["spoil_locations"]);
+        var hintCardsValue = Convert.ToInt32(loginSuccess.SlotData["hint_cards"]);
+        hintCards = Enum.IsDefined(typeof(HintCardsOption), hintCardsValue) ? (HintCardsOption) hintCardsValue : throw new ArgumentOutOfRangeException();
 
         goals = ((JArray)loginSuccess.SlotData["goals"]).Values<string>().ToList().Select(goal => session.Locations.GetLocationIdFromName(Globals.GAME_NAME, goal)).ToHashSet();
         session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION] = JArray.FromObject(new int[] { });
@@ -272,6 +294,22 @@ public static class ArchipelagoMessenger
             return [];
         }
         return goals;
+    }
+
+    private static ConcurrentDictionary<long, ScoutedItemInfo> scouted = [];
+    public static ScoutedItemInfo? scout(long id)
+    {
+        if (scouted.TryGetValue(id, out var res))
+        {
+            return res;
+        }
+
+        if (session?.Locations.ScoutLocationsAsync(hintCards > HintCardsOption.None ? HintCreationPolicy.CreateAndAnnounceOnce : HintCreationPolicy.None, [id]).Result.TryGetValue(id, out var res_scout) ?? false)
+        {
+            scouted.TryAdd(id, res_scout);
+            return res_scout;
+        }
+        return null;
     }
 }
 
@@ -678,5 +716,177 @@ class NewGameSpiritItemView_patch
         );
 
         return sprite;
+    }
+}
+
+[HarmonyPatch]
+class PowerCardView_patch
+{
+    static IEnumerable<System.Reflection.MethodBase> TargetMethods()
+    {
+        var type = typeof(PowerCardView);
+        yield return type.GetMethod(nameof(PowerCardView.Configure));
+        yield return type.GetMethod(nameof(PowerCardView.UpdateDisplayForPlayPowerCard));
+    }
+
+    static void Postfix(PowerCardView __instance)
+    {
+        var go = (__instance as MonoBehaviour)?.gameObject;
+        if (go == null) return;
+
+        var locationId = ArchipelagoMessenger.session?.Locations.GetLocationIdFromName(Globals.GAME_NAME, $"{Globals.PLAY_CARD_PREFIX}{__instance.Card.Title}");
+        if (locationId == null || ArchipelagoMessenger.session?.Locations.AllMissingLocations.Contains(locationId.Value) != true)
+            return;
+
+        GameObject logoGO = new GameObject("ArchipelagoLogo");
+
+        // Parent to root
+        logoGO.transform.SetParent(go.transform, false);
+
+        // Add Image component
+        Image img = logoGO.AddComponent<Image>();
+
+        // Assign sprite
+        img.sprite = NewGameSpiritItemView_patch.LoadLogo();
+        var color = img.color;
+        color.a = .75f;
+        img.color = color;
+
+        // Adjust position/size
+        RectTransform rt = logoGO.GetComponent<RectTransform>();
+        rt.anchoredPosition = new Vector2(0, 10);
+        rt.sizeDelta = new Vector2(50, 50);
+        rt.localScale = Vector3.one;
+    }
+}
+
+enum SpriteIcons
+{
+    Beast = 0,
+    Fire = 1,
+    Plant = 2,
+    Moon = 3,
+    Earth = 4,
+    Sun = 5,
+    Water = 6,
+    Air = 7,
+    Fear = 8,
+    Blight = 9,
+    Dahan = 10,
+    Explorer = 11,
+    Town = 12,
+    City = 13,
+    Presence = 14,
+    SacredSite = 15,
+    Slow = 16,
+    Fast = 17,
+    LeftCurl = 18,
+    RightCurl = 19,
+    Player = 20,
+    MW = 21,
+    MS = 22,
+    MJ = 23,
+    JW = 24,
+    JS = 25,
+    SW = 26,
+    RangeArrow = 27,
+    NoRange = 28,
+    X = 29,
+    /// <summary>
+    /// Jungle with presence
+    /// </summary>
+    JP = 30,
+    /// <summary>
+    /// Wetlands with presence
+    /// </summary>
+    WP = 31,
+    /// <summary>
+    /// Sands with presence
+    /// </summary>
+    SP = 32,
+    /// <summary>
+    /// Mountain with presence
+    /// </summary>
+    MP = 33,
+    Jungle = 34,
+    Mountain = 35,
+    Sands = 36,
+    Wetlands = 37,
+    JungleCutout = 38,
+    MountainCutout = 39,
+    SandsCutout = 40,
+    TerrorLevelOne = 41,
+    TerrorLevelTwo = 42,
+    TerrorLevelThree = 43,
+    Escalation = 44,
+    BeastBlack = 45,
+    Any = 46,
+    MovePresence = 47,
+    MinusSevenEnergy = 48,
+    Strife = 49,
+    Disease = 50,
+    Wilds = 51,
+    Minor = 52,
+    DestroyedPresence = 53,
+    RightArrow = 54,
+    OneTwoRange = 55,
+    PlusBlight = 56,
+    Isolate = 57,
+    Badlands = 58,
+    Star = 59,
+    EmptyEngery = 60,
+    EmptyCard = 61,
+    WhiteSpace = 62,
+    MinusTwoEnergy = 63
+}
+
+[HarmonyPatch(typeof(PowerController), nameof(PowerController.Body), MethodType.Getter)]
+class PowerController_body_patch
+{
+    static void Postfix(PowerCardController __instance, ref IEnumerable<string> __result)
+    {
+        if (!ArchipelagoMessenger.spoilLocations)
+            return;
+
+        var locationId = ArchipelagoMessenger.session?.Locations.GetLocationIdFromName(Globals.GAME_NAME, $"{Globals.PLAY_CARD_PREFIX}{__instance.Card.Title}");
+        if (locationId == null || ArchipelagoMessenger.session?.Locations.AllMissingLocations.Contains(locationId.Value) != true)
+        {
+            return;
+        }
+
+        var scoutedItemInfo = ArchipelagoMessenger.scout(locationId.Value);
+        if (scoutedItemInfo == null)
+        {
+            return;
+        }
+
+        string color = "#14DE9E";
+        var flags = scoutedItemInfo.Flags;
+        if (flags.HasFlag(ItemFlags.Advancement) && flags.HasFlag(ItemFlags.NeverExclude))
+        {
+            color = "#FFD700";
+        } else if (flags.HasFlag(ItemFlags.Trap) && flags.HasFlag(ItemFlags.NeverExclude))
+        {
+            color = "#FF7F00";
+        } else if (flags.HasFlag(ItemFlags.Advancement))
+        {
+            color = "#BC51E0";
+        }else if (flags.HasFlag(ItemFlags.NeverExclude))
+        {
+            color = "#2B67FF";
+        }else if (flags.HasFlag(ItemFlags.Trap))
+        {
+            color = "#D63A22";
+        }
+
+        var text = $"Unlocks: <color={color}>{scoutedItemInfo.ItemDisplayName} ({scoutedItemInfo.Player})</color>";
+        if (__result == null)
+        {
+            __result = [text];
+        }
+        else
+        {
+            __result = __result.Append(text);
+        }
     }
 }
