@@ -47,10 +47,10 @@ public static class ArchipelagoModifiers
     public static int energyAdjustment = 0;
     public static int cardplaysAdjustment = 0;
     public static int blightAdjustment = 0;
+    public static bool prioritisedShuffle = true;
 
     public static HashSet<string> LockedCards()
     {
-        var logger = Logger.CreateLogSource("ArchipelagoModifiers");
         return BaseLockedCards.Except(GottenItems).ToHashSet();
     }
 
@@ -191,6 +191,7 @@ public static class ArchipelagoMessenger
         ArchipelagoModifiers.BaseLockedCards = ((JArray)loginSuccess.SlotData["base_locked_cards"]).Values<string>().OfType<string>().ToHashSet();
         ArchipelagoModifiers.BaseLockedSpirits = ((JArray)loginSuccess.SlotData["base_locked_spirits"]).Values<string>().OfType<string>().ToHashSet();
         ArchipelagoModifiers.BaseLockedAspects = ((JArray)loginSuccess.SlotData["base_locked_aspects"]).Values<string>().OfType<string>().ToHashSet();
+        ArchipelagoModifiers.prioritisedShuffle = Convert.ToBoolean(loginSuccess.SlotData["prioritised_shuffle"]);
         spoilLocations = Convert.ToBoolean(loginSuccess.SlotData["spoil_locations"]);
         var hintCardsValue = Convert.ToInt32(loginSuccess.SlotData["hint_cards"]);
         hintCards = Enum.IsDefined(typeof(HintCardsOption), hintCardsValue) ? (HintCardsOption) hintCardsValue : throw new ArgumentOutOfRangeException();
@@ -517,10 +518,16 @@ public class Update_patch
             __instance.StartCoroutine(enumerator);
         }
 
+        var missingLocations = ArchipelagoMessenger.session?.Locations.AllMissingLocations.ToHashSet();
+
         var allowedMinorCards = __instance.OutOfGame.CardControllers.Where(card => card.IsMinorPowerCard && !ArchipelagoModifiers.LockedCards().Contains(card.Title));
         if (allowedMinorCards.Any())
         {
-            MoveCardsAction moveCardsAction = __instance.MoveCards(null, MoveCardReason.Debugging, allowedMinorCards, __instance.MinorPowerDeck);
+            var range = __instance.MinorPowerDeck.Location.Cards.TakeWhile(c => {
+                var locationId = ArchipelagoMessenger.session?.Locations.GetLocationIdFromName(Globals.GAME_NAME, $"{Globals.PLAY_CARD_PREFIX}{c.Title}");
+                return locationId != null && missingLocations?.Contains(locationId.Value) == true;
+            }).Count();
+            MoveCardsAction moveCardsAction = __instance.MoveCards(null, MoveCardReason.Debugging, allowedMinorCards, __instance.MinorPowerDeck, offset: UnityEngine.Random.Range(0, range + 1));
             var enumerator = __instance.DoAction(moveCardsAction, true, true);
             __instance.ExhaustCoroutine(enumerator);
             __instance.StartCoroutine(enumerator);
@@ -529,7 +536,11 @@ public class Update_patch
         var allowedMajorCards = __instance.OutOfGame.CardControllers.Where(card => card.IsMajorPowerCard && !ArchipelagoModifiers.LockedCards().Contains(card.Title));
         if (allowedMajorCards.Any())
         {
-            MoveCardsAction moveCardsAction = __instance.MoveCards(null, MoveCardReason.Debugging, allowedMajorCards, __instance.MajorPowerDeck);
+            var range = __instance.MajorPowerDeck.Location.Cards.TakeWhile(c => {
+                var locationId = ArchipelagoMessenger.session?.Locations.GetLocationIdFromName(Globals.GAME_NAME, $"{Globals.PLAY_CARD_PREFIX}{c.Title}");
+                return locationId != null && missingLocations?.Contains(locationId.Value) == true;
+            }).Count();
+            MoveCardsAction moveCardsAction = __instance.MoveCards(null, MoveCardReason.Debugging, allowedMajorCards, __instance.MajorPowerDeck, offset: UnityEngine.Random.Range(0, range + 1));
             var enumerator = __instance.DoAction(moveCardsAction, true, true);
             __instance.ExhaustCoroutine(enumerator);
             __instance.StartCoroutine(enumerator);
@@ -888,5 +899,47 @@ class PowerController_body_patch
         {
             __result = __result.Append(text);
         }
+    }
+}
+
+[HarmonyPatch(typeof(ShuffleLocationAction), nameof(ShuffleLocationAction.DoAction))]
+class Shuffle_patch
+{
+    static readonly System.Reflection.FieldInfo cardsField =
+        AccessTools.Field(typeof(Location), "_cards");
+
+    static void Postfix(ShuffleLocationAction __instance)
+    {
+        if (!ArchipelagoModifiers.prioritisedShuffle)
+            return;
+
+        var location = __instance.LocationToShuffle.Location;
+        if (location != __instance.GameController.MinorPowerDeck.Location || location != __instance.GameController.MajorPowerDeck.Location)
+            return;
+
+        if (cardsField.GetValue(location) is not List<Card> cards)
+        {
+            return;
+        }
+
+        var missingLocations = ArchipelagoMessenger.session?.Locations.AllMissingLocations.ToHashSet();
+
+        var uncheckedCards = new List<Card>(cards.Count());
+        var otherCards = new List<Card>(cards.Count());
+
+        foreach (var card in cards)
+        {
+            var locationId = ArchipelagoMessenger.session?.Locations
+                .GetLocationIdFromName(Globals.GAME_NAME, $"{Globals.PLAY_CARD_PREFIX}{card.Title}");
+
+            if (locationId != null && missingLocations?.Contains(locationId.Value) == true)
+                uncheckedCards.Add(card);
+            else
+                otherCards.Add(card);
+        }
+
+        cards.Clear();
+        cards.AddRange(uncheckedCards);
+        cards.AddRange(otherCards);
     }
 }
