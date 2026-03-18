@@ -4,7 +4,8 @@ This is an Archipelago implementation for the game [Spirit Island](Archipelago.M
 
 In this implementation you can decide yourself what adversaries you want to face with what spirits and difficulty.
 
-**Important:** Because of the large amount of Spirits and Adversaries, by default no goal is set. This means if you use the defealt settings your game will instantly complete! Be sure to set the `Victory Goals` field in your yaml.
+> [!Important]
+> Because of the large amount of Spirits and Adversaries, by default no goal is set. This means if you use the defealt settings your game will instantly complete! Be sure to set the `Victory Goals` field in your yaml.
 
 _This implementation is largely based on [this](https://github.com/toasterparty/oc2-modding) Archipelago implementation for OC2_
 
