@@ -1,17 +1,11 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
-using Archipelago;
-using Archipelago.Archipelago;
 using Archipelago.Data;
 using Archipelago.MultiClient.Net;
 using Archipelago.MultiClient.Net.BounceFeatures.DeathLink;
 using Archipelago.MultiClient.Net.Enums;
-using Archipelago.MultiClient.Net.Helpers;
-using Archipelago.MultiClient.Net.Models;
 using Archipelago.UI;
 using BepInEx.Logging;
 using HarmonyLib;
@@ -74,6 +68,9 @@ public static class APClient
         var gottenItems = Session.Items.AllItemsReceived.Select(i => i.ItemName);
         logger.LogDebug($"Gotten items: {string.Join(", ", gottenItems)}");
         logger.LogDebug($"SlotData: {loginSuccess.SlotData.Join()}");
+
+        ArchipelagoModifiers.spiritShards =
+            Convert.ToInt32(loginSuccess.SlotData["spirit_shards"]);
 
         ArchipelagoModifiers.energyAdjustment =
             Convert.ToInt32(loginSuccess.SlotData["base_energy_offset"]) +
@@ -148,7 +145,7 @@ public static class APClient
             else
             {
                 logger.LogInfo($"{name} added to allowed items");
-                ArchipelagoModifiers.GottenItems.Add(name);
+                ArchipelagoModifiers.GottenItems[name] = ArchipelagoModifiers.GottenItems.GetValueOrDefault(name) + 1;
 
                 if (HintCards >= HintCardsOption.Always)
                 {
