@@ -13,8 +13,7 @@ public class ContentPatch
     {
         if (identifier.Contains("_"))
         {
-            string partAfterUnderscore = identifier[(identifier.LastIndexOf('_') + 1)..];
-            __result = !ArchipelagoModifiers.LockedAspects().Contains(sWhitespace.Replace(partAfterUnderscore.ToLower(), ""));
+            __result = !ArchipelagoModifiers.LockedAspects().Contains(sWhitespace.Replace(identifier.ToLower(), ""));
         }
         else
         {
