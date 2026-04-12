@@ -47,6 +47,7 @@ class SpiritIconPatch
 
         // Assign sprite
         img.sprite = ArchipelagoIcon.LoadIcon();
+        img.raycastTarget = false;
         var color = img.color;
         color.a = .75f;
         img.color = color;
