@@ -10,6 +10,7 @@ public class SimpleUI : MonoBehaviour
     private Rect windowRect = new(20, 20, 230, 240);
     private bool showWindow = true;
     public static bool connected = false;
+    private bool isConnecting = false;
     private string? error = null;
     private bool goalsOpen = false;
     private Vector2 scroll = Vector2.zero;
@@ -71,13 +72,9 @@ public class SimpleUI : MonoBehaviour
             GUILayout.Label("Password");
             password = GUILayout.PasswordField(password, '*');
 
-            if (GUILayout.Button("Connect"))
+            if (GUILayout.Button("Connect") && !isConnecting)
             {
-                error = APClient.Connect(room, slotName, password);
-                if (error == null)
-                {
-                    connected = true;
-                }
+                ConnectAsync();
             }
 
             if (GUILayout.Button("Exit"))
@@ -90,6 +87,19 @@ public class SimpleUI : MonoBehaviour
             GUILayout.Label(error);
 
         GUI.DragWindow();
+    }
+
+    async void ConnectAsync()
+    {
+        isConnecting = true;
+        error = await APClient.Connect(room, slotName, password);
+
+        if (error == null)
+        {
+            connected = true;
+        }
+
+        isConnecting = false;
     }
 
     public static void SetCheckedLocations(ReadOnlyCollection<long> set)

@@ -6,6 +6,7 @@ using Archipelago.Data;
 using Archipelago.MultiClient.Net;
 using Archipelago.MultiClient.Net.BounceFeatures.DeathLink;
 using Archipelago.MultiClient.Net.Enums;
+using Archipelago.MultiClient.Net.Packets;
 using Archipelago.UI;
 using BepInEx.Logging;
 using HarmonyLib;
@@ -31,17 +32,18 @@ public static class APClient
 
     public static int Deathlink { get; private set; } = 0;
     private static readonly Queue<string> queuedLocations = new();
-    public static string? Connect(string server, string user, string password)
+    public static async Task<string?> Connect(string server, string user, string password)
     {
         Session = ArchipelagoSessionFactory.CreateSession(server);
         DeathLinkService = Session.CreateDeathLinkService();
 
         InitialiseSession(Session, DeathLinkService);
+        RoomInfoPacket _ = await Session.ConnectAsync();
 
         LoginResult result;
         try
         {
-            result = Session.TryConnectAndLogin(
+            result = await Session.LoginAsync(
                 Globals.GAME_NAME,
                 user,
                 ItemsHandlingFlags.AllItems,
