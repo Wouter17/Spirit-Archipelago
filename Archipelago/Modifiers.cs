@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Handelabra.SpiritIsland.Engine.Model;
 
 namespace Archipelago.Archipelago;
 
@@ -10,6 +11,7 @@ public static class ArchipelagoModifiers
     public static HashSet<string> BaseLockedSpirits { get; set; } = [];
     public static HashSet<string> BaseLockedAspects { get; set; } = [];
     public static Dictionary<string, int> GottenItems { get; set; } = [];
+    public static ElementSet ElementsAdjustment { get; set; } = [];
     public static int spiritShards = 1;
     public static int energyAdjustment = 0;
     public static int cardplaysAdjustment = 0;

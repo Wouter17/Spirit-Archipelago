@@ -9,6 +9,7 @@ using Archipelago.MultiClient.Net.Enums;
 using Archipelago.MultiClient.Net.Packets;
 using Archipelago.UI;
 using BepInEx.Logging;
+using Handelabra.SpiritIsland.Engine;
 using HarmonyLib;
 using Newtonsoft.Json.Linq;
 using Logger = BepInEx.Logging.Logger;
@@ -32,6 +33,8 @@ public static class APClient
 
     public static int Deathlink { get; private set; } = 0;
     private static readonly Queue<string> queuedLocations = new();
+    private static bool isInitializing = true;
+
     public static async Task<string?> Connect(string server, string user, string password)
     {
         Session = ArchipelagoSessionFactory.CreateSession(server);
@@ -124,12 +127,14 @@ public static class APClient
             DeathLinkService.EnableDeathLink();
         }
 
+        isInitializing = false;
         OnSessionConnected();
         return null;
     }
 
     private static void InitialiseSession(ArchipelagoSession session, DeathLinkService deathLinkService)
     {
+        isInitializing = true;
         session.Socket.SocketClosed += _ => SimpleUI.connected = false;
 
         session.Items.ItemReceived += (helper) =>
@@ -144,6 +149,13 @@ public static class APClient
                 ArchipelagoModifiers.cardplaysAdjustment++;
             else if (name == Globals.PLUS_BLIGHT_NAME)
                 ArchipelagoModifiers.blightAdjustment++;
+            else if (Enum.TryParse<ElementType>(name, out var element))
+            {
+                if (!isInitializing && !ArchipelagoModifiers.ElementsAdjustment.TryAdd(element, 1))
+                {
+                    ArchipelagoModifiers.ElementsAdjustment[element]++;
+                }
+            }
             else
             {
                 logger.LogInfo($"{name} added to allowed items");
