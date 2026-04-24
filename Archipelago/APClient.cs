@@ -120,6 +120,7 @@ public static class APClient
             var goalIds = newVal?.ToObject<long[]>() ?? Array.Empty<long>();
             GoalService.CheckGoalCompletion(goalIds);
         };
+        GoalService.CheckGoalCompletion(Session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION]);
 
         Deathlink = Convert.ToInt32(loginSuccess.SlotData["deathlink"]);
         if (Deathlink == 1)
