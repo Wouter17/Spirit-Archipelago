@@ -194,11 +194,11 @@ public static class APClient
 
     public static void AdversaryDefeated(string name, int difficulty, string spirit)
     {
-        logger.LogInfo($"Defeated {name} with {spirit} on difficulty {difficulty}");
+        logger.LogInfo($"Defeated {name} with {spirit} on level {difficulty}");
         for (int i = 0; i <= difficulty; i++)
         {
-            LocationService.CheckLocation($"Defeat {name} with {spirit} on difficulty {i}");
-            LocationService.CheckLocation($"Defeat {name} with {Globals.ANY_SPIRIT} on difficulty {i}");
+            LocationService.CheckLocation($"Defeat {name} with {spirit} on level {i}");
+            LocationService.CheckLocation($"Defeat {name} with {Globals.ANY_SPIRIT} on level {i}");
         }
     }
 
