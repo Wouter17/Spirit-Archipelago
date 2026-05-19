@@ -117,10 +117,11 @@ public static class APClient
         Session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION].Initialize(JArray.FromObject(new int[] { }));
         Session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION].OnValueChanged += (_, newVal, _) =>
         {
-            var goalIds = newVal?.ToObject<long[]>() ?? Array.Empty<long>();
+            var goalIds = newVal?.ToObject<long[]>() ?? [];
             GoalService.CheckGoalCompletion(goalIds);
         };
-        GoalService.CheckGoalCompletion(Session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION]);
+        var checkedLocations = await Session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION].GetAsync<long[]>();
+        GoalService.CheckGoalCompletion(checkedLocations);
 
         Deathlink = Convert.ToInt32(loginSuccess.SlotData["deathlink"]);
         if (Deathlink == 1)
