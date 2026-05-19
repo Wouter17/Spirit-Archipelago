@@ -41,7 +41,15 @@ public static class APClient
         DeathLinkService = Session.CreateDeathLinkService();
 
         InitialiseSession(Session, DeathLinkService);
-        RoomInfoPacket _ = await Session.ConnectAsync();
+        try
+        {
+            RoomInfoPacket _ = await Session.ConnectAsync();
+        }
+        catch (Exception e)
+        {
+            logger.LogWarning($"Failed to connect to {server} as {user}:" + e);
+            return $"Failed to connect to {server} as {user}";
+        }
 
         LoginResult result;
         try

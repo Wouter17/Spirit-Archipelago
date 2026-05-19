@@ -1,7 +1,10 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using Archipelago.Archipelago;
+using BepInEx.Logging;
 using UnityEngine;
+using Logger = BepInEx.Logging.Logger;
 
 namespace Archipelago.UI;
 
@@ -19,6 +22,7 @@ public class SimpleUI : MonoBehaviour
     string password = "";
 
     private static ReadOnlyCollection<long> checkedLocations = new List<long>().AsReadOnly();
+    static readonly ManualLogSource logger = Logger.CreateLogSource("SimpleUI");
 
     void Update()
     {
@@ -91,12 +95,23 @@ public class SimpleUI : MonoBehaviour
 
     async void ConnectAsync()
     {
-        isConnecting = true;
-        error = await APClient.Connect(room, slotName, password);
-
-        if (error == null)
+        try
         {
-            connected = true;
+            isConnecting = true;
+            error = await APClient.Connect(room, slotName, password);
+
+            if (error == null)
+            {
+                connected = true;
+            } else
+            {
+                logger.LogWarning(error);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(error);
+            error = ex.ToString();
         }
 
         isConnecting = false;
