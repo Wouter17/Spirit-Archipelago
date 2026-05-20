@@ -85,17 +85,11 @@ public static class APClient
         ArchipelagoModifiers.spiritShards =
             Convert.ToInt32(loginSuccess.SlotData["spirit_shards"]);
 
-        ArchipelagoModifiers.energyAdjustment =
-            Convert.ToInt32(loginSuccess.SlotData["base_energy_offset"]) +
-            gottenItems.Count(name => name == Globals.PLUS_ENERGY_NAME);
-
-        ArchipelagoModifiers.cardplaysAdjustment =
-            Convert.ToInt32(loginSuccess.SlotData["base_cardplay_offset"]) +
-            gottenItems.Count(name => name == Globals.PLUS_CARDPLAYS_NAME);
-
-        ArchipelagoModifiers.blightAdjustment =
-            Convert.ToInt32(loginSuccess.SlotData["base_blight_offset"]) +
-            gottenItems.Count(name => name == Globals.PLUS_BLIGHT_NAME);
+        ArchipelagoModifiers.SetBaseAdjustment(
+            Convert.ToInt32(loginSuccess.SlotData["base_energy_offset"]),
+            Convert.ToInt32(loginSuccess.SlotData["base_cardplay_offset"]),
+            Convert.ToInt32(loginSuccess.SlotData["base_blight_offset"])
+        );
 
         ArchipelagoModifiers.BaseLockedCards =
             ((JArray)loginSuccess.SlotData["base_locked_cards"]).Values<string>().OfType<string>().ToHashSet();

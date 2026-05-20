@@ -13,10 +13,19 @@ public static class ArchipelagoModifiers
     public static Dictionary<string, int> GottenItems { get; set; } = [];
     public static ElementSet ElementsAdjustment { get; set; } = [];
     public static int spiritShards = 1;
-    public static int energyAdjustment = 0;
-    public static int cardplaysAdjustment = 0;
-    public static int blightAdjustment = 0;
+
+    public static AdjustmentValue energyAdjustment = new();
+    public static AdjustmentValue cardplaysAdjustment = new();
+    public static AdjustmentValue blightAdjustment = new();
+
     public static bool prioritisedShuffle = true;
+
+    public static void SetBaseAdjustment(int energy, int cardplays, int blight)
+    {
+        energyAdjustment.Base = energy;
+        cardplaysAdjustment.Base = cardplays;
+        blightAdjustment.Base = blight;
+    }
 
     public static HashSet<string> LockedCards()
     {
@@ -37,5 +46,41 @@ public static class ArchipelagoModifiers
     public static string RemoveSpecial(string input)
     {
         return sWhitespace.Replace(input, "");
+    }
+}
+
+public struct AdjustmentValue(int baseValue = 0, int adjustment = 0)
+{
+    public int Base { get; set; } = baseValue;
+    public int Adjustment { get; set; } = adjustment;
+
+    public readonly int Value => Base + Adjustment;
+
+    public static implicit operator int(AdjustmentValue value)
+    {
+        return value.Value;
+    }
+
+    public static AdjustmentValue operator ++(AdjustmentValue value)
+    {
+        value.Adjustment++;
+        return value;
+    }
+
+    public static AdjustmentValue operator +(AdjustmentValue value, int amount)
+    {
+        value.Adjustment += amount;
+        return value;
+    }
+
+    public static AdjustmentValue operator -(AdjustmentValue value, int amount)
+    {
+        value.Adjustment -= amount;
+        return value;
+    }
+
+    public override readonly string ToString()
+    {
+        return Value.ToString();
     }
 }
