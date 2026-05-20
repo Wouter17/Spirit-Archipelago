@@ -18,9 +18,14 @@ public static class LocationService
             var id = session.Locations.GetLocationIdFromName(Globals.GAME_NAME, name);
             session.Locations.CompleteLocationChecks(id);
 
-            var achieved = session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION].To<long[]>();
-            if (!achieved.Contains(id))
-                session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION] = JArray.FromObject(achieved.Append(id));
+            if (!GoalService.goals.Contains(id))
+                return;
+
+            session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION].GetAsync<long[]>().ContinueWith(task =>
+            {
+                if (task.IsCompletedSuccessfully && !task.Result.Contains(id))
+                    session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION] = JArray.FromObject(task.Result.Append(id));
+            });
         }
         else
         {
