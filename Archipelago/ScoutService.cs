@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Archipelago.MultiClient.Net.Enums;
 using Archipelago.MultiClient.Net.Models;
 
@@ -6,24 +9,44 @@ namespace Archipelago.Archipelago;
 
 public static class ScoutService
 {
-    private static readonly ConcurrentDictionary<long, ScoutedItemInfo> scouted = new();
+    private static readonly ConcurrentDictionary<long, (ScoutedItemInfo, HintCreationPolicy)> scouted = new();
+    private static readonly ConcurrentDictionary<long, byte> inFlight = new();
 
     public static ScoutedItemInfo? Scout(long id)
     {
+        return Scout(id, APClient.HintCards > HintCardsOption.None ? HintCreationPolicy.CreateAndAnnounceOnce : HintCreationPolicy.None);
+    }
+
+    public static ScoutedItemInfo? Scout(long id, HintCreationPolicy policy)
+    {
+        ScoutedItemInfo? result = null;
         if (scouted.TryGetValue(id, out var res))
-            return res;
+            result = res.Item1;
+            if (res.Item2 >= policy)
+                return result;
 
         var session = APClient.Session;
-        if (session?.Locations
-            .ScoutLocationsAsync(
-                APClient.HintCards > HintCardsOption.None ? HintCreationPolicy.CreateAndAnnounceOnce : HintCreationPolicy.None,
-                [id])
-            .Result.TryGetValue(id, out var resScout) ?? false)
-        {
-            scouted.TryAdd(id, resScout);
-            return resScout;
-        }
+        if (session == null)
+            return result;
 
-        return null;
+        if (!inFlight.TryAdd(id, 0))
+            return result;
+
+        var scoutTask = session.Locations.ScoutLocationsAsync(policy, [id]);
+        scoutTask.ContinueWith(task =>
+        {
+            if (task.IsCompletedSuccessfully && task.Result.TryGetValue(id, out var resScout))
+            {
+                scouted.TryAdd(id, (resScout, policy));
+            }
+        });
+
+        Task.WhenAny(scoutTask, Task.Delay(TimeSpan.FromSeconds(3))).ContinueWith(task =>
+        {
+            inFlight.TryRemove(id, out var _);
+        });
+
+
+        return result;
     }
 }

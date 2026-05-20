@@ -171,12 +171,11 @@ public static class APClient
                 logger.LogInfo($"{name} added to allowed items");
                 ArchipelagoModifiers.GottenItems[name] = ArchipelagoModifiers.GottenItems.GetValueOrDefault(name) + 1;
 
-                if (HintCards >= HintCardsOption.Always)
+                var nameIfCard = $"{Globals.PLAY_CARD_PREFIX}{name}";
+                var id = Session?.Locations.GetLocationIdFromName(Globals.GAME_NAME, nameIfCard);
+                if (id is long i && i != -1)
                 {
-                    var nameIfCard = $"{Globals.PLAY_CARD_PREFIX}{name}";
-                    var id = Session?.Locations.GetLocationIdFromName(Globals.GAME_NAME, nameIfCard);
-                    if (id is long i && i != -1)
-                        _ = Task.Run(() => ScoutService.Scout(i));
+                    ScoutService.Scout(i, HintCards >= HintCardsOption.Always ? HintCreationPolicy.CreateAndAnnounceOnce : HintCreationPolicy.None);
                 }
             }
 
