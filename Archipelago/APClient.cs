@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using Archipelago.Data;
 using Archipelago.MultiClient.Net;
@@ -34,6 +35,8 @@ public static class APClient
     public static int Deathlink { get; private set; } = 0;
     private static readonly Queue<string> queuedLocations = new();
     private static bool isInitializing = true;
+
+    private static readonly Version assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version;
 
     public static async Task<string?> Connect(string server, string user, string password)
     {
@@ -76,6 +79,30 @@ public static class APClient
         }
 
         var loginSuccess = (LoginSuccessful)result;
+
+        var versionSplit = Convert.ToString(loginSuccess.SlotData["version"]).Split(".");
+        if (versionSplit.Length != 3)
+        {
+            return $"Invalid version on server side: {Convert.ToString(loginSuccess.SlotData["version"])}";
+        }
+        try
+        {
+            var serverVersion = new Version(short.Parse(versionSplit[0]), short.Parse(versionSplit[1]), short.Parse(versionSplit[2]));
+            if (serverVersion > assemblyVersion)
+            {
+                await Session.Socket.DisconnectAsync();
+                return $"The server is running version {serverVersion}, whilst you are running version {assemblyVersion}. Please update to the newest version";
+            }
+            else if (assemblyVersion > serverVersion)
+            {
+                logger.LogWarning($"The server is running version {serverVersion}, whilst you are running version {assemblyVersion}. " +
+                    "Please ensure compatibility between version.");
+            }
+        }
+        catch (Exception e)
+        {
+            return $"Could not convert version string to integer: {e}";
+        }
 
         // Initialise modifiers
         var gottenItems = Session.Items.AllItemsReceived.Select(i => i.ItemName);
