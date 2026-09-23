@@ -208,7 +208,8 @@ public static class APClient
     {
         logger.LogInfo($"Player died{(Deathlink == 0 ? "" : ", sending deathlink")}");
         if (DeathLinkService == null || Session == null || Deathlink == 0) return;
-        DeathLinkService.SendDeathLink(new DeathLink(Session.Players.ActivePlayer.Alias, "Failed to protect the island"));
+        var activePlayer = Session.Players.ActivePlayer;
+        DeathLinkService.SendDeathLink(new DeathLink(activePlayer.Name, $"{activePlayer.Alias} failed to protect the island"));
     }
 
     public static IReadOnlyCollection<long> AllLocationsChecked() =>
