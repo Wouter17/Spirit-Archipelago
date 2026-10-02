@@ -9,13 +9,21 @@ In this implementation you can decide yourself what adversaries you want to face
 
 _This implementation is largely based on [this](https://github.com/toasterparty/oc2-modding) Archipelago implementation for OC2_
 
-# How To Install (the client)
+# Windows: How To Install (the client)
 
 1. Download and extract the [Latest Release](https://github.com/Wouter17/Spirit-Archipelago/releases).
 
 2. Double click `si-modding-install.bat` and use the file picker window to select your game's .exe file.
 
 3. Run the game once, wait until you reach the main menu, and then close it.
+
+# Linux (Proton): How To Install (the client)
+
+1. Download and extract the [Latest Release](https://github.com/Wouter17/Spirit-Archipelago/releases).
+
+2. Double click `si-modding-install.sh` and paste in your game's installation directory (containing SpiritIsland.exe)
+
+3. Run the game once (and find a proton version that works), wait until you reach the main menu. There should be an archipelago popup. Close the game.
 
 # How To Generate a Spirit Island Archipelago game
 _This setup guide assumes you are running Archipelago from source (python files instead of .exe)_
