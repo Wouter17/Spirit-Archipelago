@@ -17,7 +17,7 @@ _This implementation is largely based on [this](https://github.com/toasterparty/
 
 3. Run the game once, wait until you reach the main menu, and then close it.
 
-# Linux: How To Install (the client)
+# Linux (Proton): How To Install (the client)
 
 1. Download and extract the [Latest Release](https://github.com/Wouter17/Spirit-Archipelago/releases).
 
