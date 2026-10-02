@@ -1,7 +1,8 @@
-using Archipelago.UI;
+﻿using Archipelago.UI;
 using BepInEx;
 using BepInEx.Logging;
 using HarmonyLib;
+using UnityEngine;
 using Logger = BepInEx.Logging.Logger;
 
 namespace Archipelago;
@@ -28,7 +29,12 @@ public class Plugin : BaseUnityPlugin
         Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
         harmony.PatchAll();
 
-        ui = gameObject.AddComponent<SimpleUI>();
+        var UIGameObject = new GameObject("ArchipelagoUI")
+        {
+            hideFlags = HideFlags.HideAndDontSave
+        };
+        DontDestroyOnLoad(UIGameObject);
+        ui = UIGameObject.AddComponent<SimpleUI>();
     }
 
     public static void Exit()
