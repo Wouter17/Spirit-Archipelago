@@ -8,5 +8,6 @@ public static class Globals
     public const string PLAY_CARD_PREFIX = "Play: ";
     public const string GAME_NAME = "Spirit Island";
     public const string ANY_SPIRIT = "Any";
-    public const string GOALS_STORE_LOCATION = "goalsAchieved";
+    public const string VICTORY_ITEM_NAME = "Shard of the island";
+    public const string VICTORY_POSTFIX = " (victory condition)";
 }

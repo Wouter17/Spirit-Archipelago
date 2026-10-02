@@ -138,19 +138,13 @@ public static class APClient
             : throw new ArgumentOutOfRangeException();
 
         var goals = ((JArray)loginSuccess.SlotData["goals"])
-            .Values<string>()
-            .Select(g => Session.Locations.GetLocationIdFromName(Globals.GAME_NAME, g))
+            .Values<long>()
             .ToHashSet();
-        GoalService.Initialise(goals);
+        logger.LogDebug($"Goals are {goals.Join()}");
 
-        Session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION].Initialize(JArray.FromObject(new int[] { }));
-        Session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION].OnValueChanged += (_, newVal, _) =>
-        {
-            var goalIds = newVal?.ToObject<long[]>() ?? [];
-            GoalService.CheckGoalCompletion(goalIds);
-        };
-        var checkedLocations = await Session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION].GetAsync<long[]>();
-        GoalService.CheckGoalCompletion(checkedLocations);
+        var requiredGoals = Convert.ToInt32(loginSuccess.SlotData["required_goals"]);
+        GoalService.Initialise(goals, requiredGoals);
+        GoalService.CheckGoalCompletion();
 
         Deathlink = Convert.ToInt32(loginSuccess.SlotData["deathlink"]);
         if (Deathlink == 1)
@@ -180,6 +174,10 @@ public static class APClient
                 ArchipelagoModifiers.cardplaysAdjustment++;
             else if (name == Globals.PLUS_BLIGHT_NAME)
                 ArchipelagoModifiers.blightAdjustment++;
+            else if (name == Globals.VICTORY_ITEM_NAME)
+            {
+                GoalService.CheckGoalCompletion();
+            }
             else if (Enum.TryParse<ElementType>(name, out var element))
             {
                 if (!isInitializing && !ArchipelagoModifiers.ElementsAdjustment.TryAdd(element, 1))
@@ -226,8 +224,14 @@ public static class APClient
         logger.LogInfo($"Defeated {name} with {spirit} on level {difficulty}");
         for (int i = 0; i <= difficulty; i++)
         {
-            LocationService.CheckLocation($"Defeat {name} with {spirit} on level {i}");
-            LocationService.CheckLocation($"Defeat {name} with {Globals.ANY_SPIRIT} on level {i}");
+            var spiritDefeatText = $"Defeat {name} with {spirit} on level {i}";
+            var anyDefeatText = $"Defeat {name} with {Globals.ANY_SPIRIT} on level {i}";
+            LocationService.CheckLocation(
+                spiritDefeatText,
+                anyDefeatText,
+                spiritDefeatText + Globals.VICTORY_POSTFIX,
+                anyDefeatText + Globals.VICTORY_POSTFIX
+            );
         }
     }
 
@@ -239,6 +243,6 @@ public static class APClient
         DeathLinkService.SendDeathLink(new DeathLink(activePlayer.Name, $"{activePlayer.Alias} failed to protect the island"));
     }
 
-    public static IReadOnlyCollection<long> AllLocationsChecked() =>
+    public static IReadOnlyCollection<long> AllLocationsChecked =>
         Session?.Locations.AllLocationsChecked ?? new List<long>().AsReadOnly();
 }

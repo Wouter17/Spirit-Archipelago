@@ -1,8 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using Archipelago.Data;
-using Archipelago.MultiClient.Net.Enums;
-using Newtonsoft.Json.Linq;
 
 namespace Archipelago.Archipelago;
 
@@ -10,26 +8,20 @@ public static class LocationService
 {
     private static readonly Queue<string> queuedLocations = new();
 
-    public static void CheckLocation(string name)
+    public static void CheckLocation(params string[] names)
     {
         var session = APClient.Session;
         if (session?.Socket.Connected == true)
         {
-            var id = session.Locations.GetLocationIdFromName(Globals.GAME_NAME, name);
-            session.Locations.CompleteLocationChecks(id);
-
-            if (!GoalService.goals.Contains(id))
-                return;
-
-            session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION].GetAsync<long[]>().ContinueWith(task =>
-            {
-                if (task.IsCompletedSuccessfully && !task.Result.Contains(id))
-                    session.DataStorage[Scope.Slot, Globals.GOALS_STORE_LOCATION] = JArray.FromObject(task.Result.Append(id));
-            });
+            var ids = names.Select(name => session.Locations.GetLocationIdFromName(Globals.GAME_NAME, name)).Where(id => id != -1).ToArray();
+            session.Locations.CompleteLocationChecks(ids);
         }
         else
         {
-            queuedLocations.Enqueue(name);
+            foreach (var name in names)
+            {
+                queuedLocations.Enqueue(name);
+            }
         }
     }
 }
