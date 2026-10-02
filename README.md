@@ -1,6 +1,6 @@
 # Spirit Island Archipelago
 
-This is an Archipelago implementation for the game [Spirit Island](Archipelago.MultiClient.Net.dll).
+This is an Archipelago implementation for the game [Spirit Island](https://store.steampowered.com/app/1236720/Spirit_Island/).
 
 In this implementation you can decide yourself what adversaries you want to face with what spirits and difficulty.
 
