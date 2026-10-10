@@ -87,7 +87,7 @@ public static class APClient
         }
         try
         {
-            var serverVersion = new Version(short.Parse(versionSplit[0]), short.Parse(versionSplit[1]), short.Parse(versionSplit[2]));
+            var serverVersion = new Version(short.Parse(versionSplit[0]), short.Parse(versionSplit[1]), short.Parse(versionSplit[2]), 0);
             if (serverVersion > assemblyVersion)
             {
                 await Session.Socket.DisconnectAsync();
