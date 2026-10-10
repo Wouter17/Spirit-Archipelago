@@ -2,14 +2,17 @@ using System.Collections.Generic;
 using System.Linq;
 using Archipelago.Data;
 using Archipelago.UI;
+using BepInEx.Logging;
 
 namespace Archipelago.Archipelago;
 
 public static class GoalService
 {
+    internal static readonly ManualLogSource logger = Logger.CreateLogSource("GoalService");
+    
     public static HashSet<long> goals { get; private set; } = [];
 
-    private static int requiredGoals = 1;
+    private static int requiredGoals = int.MaxValue;
 
     public static void CheckGoalCompletion()
     {
@@ -20,6 +23,7 @@ public static class GoalService
 
         if (APClient.Session?.Socket.Connected == true && requiredGoals <= APClient.Session.Items.AllItemsReceived.Count(item => item.ItemName == Globals.VICTORY_ITEM_NAME))
         {
+            logger.LogInfo($"Completed the game by completing {APClient.Session.Items.AllItemsReceived.Count(item => item.ItemName == Globals.VICTORY_ITEM_NAME)} goals");
             APClient.Session.SetGoalAchieved();
         }
     }
