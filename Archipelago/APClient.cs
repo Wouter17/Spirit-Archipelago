@@ -107,7 +107,7 @@ public static class APClient
         // Initialise modifiers
         var gottenItems = Session.Items.AllItemsReceived.Select(i => i.ItemName);
         logger.LogDebug($"Gotten items: {string.Join(", ", gottenItems)}");
-        logger.LogDebug($"SlotData: {loginSuccess.SlotData.Join()}");
+        logger.LogInfo($"SlotData: {loginSuccess.SlotData.Join()}");
 
         ArchipelagoModifiers.spiritShards =
             Convert.ToInt32(loginSuccess.SlotData["spirit_shards"]);
@@ -160,7 +160,10 @@ public static class APClient
     private static void InitialiseSession(ArchipelagoSession session, DeathLinkService deathLinkService)
     {
         isInitializing = true;
-        session.Socket.SocketClosed += _ => SimpleUI.connected = false;
+        session.Socket.SocketClosed += message => {
+            logger.LogWarning($"Client disconnected: {message}");
+            SimpleUI.connected = false;
+        };
 
         session.Items.ItemReceived += (helper) =>
         {
@@ -169,11 +172,11 @@ public static class APClient
 
             var name = item.ItemName;
             if (name == Globals.PLUS_ENERGY_NAME)
-                ArchipelagoModifiers.energyAdjustment++;
+                ArchipelagoModifiers.energyAdjustment.Adjustment = session.Items.AllItemsReceived.Count(item => item.ItemName == Globals.PLUS_ENERGY_NAME);
             else if (name == Globals.PLUS_CARDPLAYS_NAME)
-                ArchipelagoModifiers.cardplaysAdjustment++;
+                ArchipelagoModifiers.cardplaysAdjustment.Adjustment = session.Items.AllItemsReceived.Count(item => item.ItemName == Globals.PLUS_CARDPLAYS_NAME);
             else if (name == Globals.PLUS_BLIGHT_NAME)
-                ArchipelagoModifiers.blightAdjustment++;
+                ArchipelagoModifiers.blightAdjustment.Adjustment = session.Items.AllItemsReceived.Count(item => item.ItemName == Globals.PLUS_BLIGHT_NAME);
             else if (name == Globals.VICTORY_ITEM_NAME)
             {
                 GoalService.CheckGoalCompletion();
