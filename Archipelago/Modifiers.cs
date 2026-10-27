@@ -43,7 +43,7 @@ public static class ArchipelagoModifiers
     }
 
     private static readonly Regex sWhitespace = new(@"[^A-Za-z]");
-    public static string RemoveSpecial(string input)
+    private static string RemoveSpecial(string input)
     {
         return sWhitespace.Replace(input, "");
     }
