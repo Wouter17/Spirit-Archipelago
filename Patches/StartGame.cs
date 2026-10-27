@@ -14,20 +14,23 @@ public class StartGamePatch
     static void Postfix(GameController __instance)
     {
         var session = APClient.Session;
-        if (session?.Socket.Connected == true)
+        if (session?.Socket.Connected != true)
         {
-            var ids = __instance.SpiritControllers
-                .SelectMany(spirit =>
-                    spirit.PowerCardControllers
-                        .Select(card =>
-                        {
-                            var nameIfCard = $"{Globals.PLAY_CARD_PREFIX}{card}";
-                            return session.Locations.GetLocationIdFromName(Globals.GAME_NAME, nameIfCard);
-                        })
-                )
-                .Where(x => x != -1)
-                .ToArray();
-            ScoutService.ScoutOnce(ids, HintCreationPolicy.None);
+            return;
         }
+
+        var ids = __instance.SpiritControllers
+            .SelectMany(spirit =>
+                spirit.PowerCardControllers
+                    .Select(card =>
+                    {
+                        var nameIfCard = $"{Globals.PLAY_CARD_PREFIX}{card}";
+                        return session.Locations.GetLocationIdFromName(Globals.GAME_NAME, nameIfCard);
+                    })
+            )
+            .Where(x => x != -1)
+            .ToArray();
+        ScoutService.ScoutOnce(ids, HintCreationPolicy.None);
+
     }
 }
