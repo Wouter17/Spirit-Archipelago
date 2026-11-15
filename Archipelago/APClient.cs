@@ -90,13 +90,52 @@ public static class APClient
             var serverVersion = new Version(short.Parse(versionSplit[0]), short.Parse(versionSplit[1]), short.Parse(versionSplit[2]), 0);
             if (serverVersion > assemblyVersion)
             {
-                await Session.Socket.DisconnectAsync();
-                return $"The server is running version {serverVersion}, whilst you are running version {assemblyVersion}. Please update to the newest version";
+                logger.LogWarning($"The server is running a newer version {serverVersion}, whilst you are running version {assemblyVersion}. " +
+                    "Please ensure compatibility between version.");
             }
             else if (assemblyVersion > serverVersion)
             {
-                logger.LogWarning($"The server is running version {serverVersion}, whilst you are running version {assemblyVersion}. " +
+                logger.LogWarning($"The server is running an older version {serverVersion}, whilst you are running version {assemblyVersion}. " +
                     "Please ensure compatibility between version.");
+            }
+
+            var protocolVersionSplit = Convert.ToString(loginSuccess.SlotData.GetValueOrDefault("protocol_version")).Split(".");
+            if (protocolVersionSplit.Length != 3)
+            {
+                logger.LogWarning($"APworld version does not supply protocol version, consider upgrading to a newer version for your next world");
+            }
+            else
+            {
+                var serverProtocolVersion = new Version(short.Parse(protocolVersionSplit[0]), short.Parse(protocolVersionSplit[1]), short.Parse(protocolVersionSplit[2]));
+                var clientVersion = new Version(1, 0, 1);
+                if (serverProtocolVersion.Major != clientVersion.Major)
+                {
+                    await Session.Socket.DisconnectAsync();
+                    return $"The server is running protocol version {serverProtocolVersion} (server version {serverVersion}), " +
+                        $"whilst you are running protocol version {clientVersion} (client version {assemblyVersion}). " +
+                        "Please update to matching (protocol) versions";
+                }
+                if (serverProtocolVersion.Minor < clientVersion.Minor)
+                {
+                    await Session.Socket.DisconnectAsync();
+                    return $"The server is running protocol version {serverProtocolVersion} (server version {serverVersion}), " +
+                        $"whilst you are running protocol version {clientVersion} (client version {assemblyVersion}). " +
+                        "Your client expects fields which are not there. Please downgrade to a lower version.";
+                }
+                if (serverProtocolVersion.Minor > clientVersion.Minor)
+                {
+                    logger.LogWarning($"The server is running a newer protocol version {serverProtocolVersion} (server version {serverVersion}), " +
+                        $"whilst you are running protocol version {clientVersion} (client version {assemblyVersion}). " +
+                        "Some newer things may not work and options may be ignored."
+                    );
+                }
+                else if (serverProtocolVersion.Build != clientVersion.Build)
+                {
+                    logger.LogWarning($"The server is running a different protocol build version {serverProtocolVersion} (server version {serverVersion}), " +
+                        $"whilst you are running protocol version {clientVersion} (client version {assemblyVersion}). " +
+                        "Some newer options may not work (as expected)."
+                    );
+                }
             }
         }
         catch (Exception e)
@@ -160,7 +199,8 @@ public static class APClient
     private static void InitialiseSession(ArchipelagoSession session, DeathLinkService deathLinkService)
     {
         isInitializing = true;
-        session.Socket.SocketClosed += message => {
+        session.Socket.SocketClosed += message =>
+        {
             logger.LogWarning($"Client disconnected: {message}");
             SimpleUI.connected = false;
         };
